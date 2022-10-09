@@ -1,0 +1,105 @@
+diff --git a/arch/x86/entry/syscalls/syscall_64.tbl b/arch/x86/entry/syscalls/syscall_64.tbl
+index bbfc6d440870..c625ff25b641 100644
+--- a/arch/x86/entry/syscalls/syscall_64.tbl
++++ b/arch/x86/entry/syscalls/syscall_64.tbl
+@@ -345,7 +345,9 @@
+ 334	common	rseq			__x64_sys_rseq
+ 424	common	pidfd_send_signal	__x64_sys_pidfd_send_signal
+ 434	common	pidfd_open		__x64_sys_pidfd_open
+-
++435	common	get_log_level		__x64_sys_get_log_level
++436	common	set_log_level		__x64_sys_set_log_level
++437	common	add_log_message		__x64_sys_add_log_message
+ #
+ # x32-specific system call numbers start at 512 to avoid cache impact
+ # for native 64-bit operation. The __x32_compat_sys stubs are created
+diff --git a/include/linux/syscalls.h b/include/linux/syscalls.h
+index 8e5b2c6d5dea..91662990391c 100644
+--- a/include/linux/syscalls.h
++++ b/include/linux/syscalls.h
+@@ -1297,4 +1297,11 @@ static inline unsigned int ksys_personality(unsigned int personality)
+ 	return old;
+ }
+ 
++//Project 1 System Call Prototypes
++asmlinkage int sys_get_log_level(void);
++
++asmlinkage long sys_set_log_level(int new_log_level);
++
++asmlinkage long sys_add_log_message(const char* message, int level);
++
+ #endif
+diff --git a/init/main.c b/init/main.c
+index 02f6b6bd6a17..65dd24ffa972 100644
+--- a/init/main.c
++++ b/init/main.c
+@@ -119,6 +119,9 @@ bool early_boot_irqs_disabled __read_mostly;
+ enum system_states system_state __read_mostly;
+ EXPORT_SYMBOL(system_state);
+ 
++int process_log_level = 0;
++EXPORT_SYMBOL(process_log_level);
++
+ /*
+  * Boot command-line arguments
+  */
+diff --git a/kernel/sys.c b/kernel/sys.c
+index 0a1cdee858de..a10f81868b5e 100644
+--- a/kernel/sys.c
++++ b/kernel/sys.c
+@@ -2806,4 +2806,55 @@ COMPAT_SYSCALL_DEFINE1(sysinfo, struct compat_sysinfo __user *, info)
+ 
+ 	return 0;
+ }
++
++//Project 1 System Call Implementations
++
++extern int process_log_level; //Kernel wide process log level attribute that was initiialized in init and then exported
++
++SYSCALL_DEFINE0(get_log_level)
++{
++	return process_log_level;
++}
++
++SYSCALL_DEFINE1(set_log_level, int, new_log_level)
++{
++	if(current_uid().val == 0 && new_log_level >= 0 && new_log_level <= 7)
++	{
++		process_log_level = new_log_level;
++		return new_log_level;
++	}
++	else
++		return -1;
++}
++
++SYSCALL_DEFINE2(add_log_message, const char*, message, int, level)
++{
++	const char* process_name = current->comm;
++	int process_id = current->pid;
++	if (level >= 0 && level <= 7)
++	{	if (level <= process_log_level)
++		{
++			if (level == 0)
++				printk(KERN_EMERG "PROC_OVERRIDE [%s, %d]: %s", process_name, process_id, message);
++			if (level == 1)
++				printk(KERN_ALERT "PROC_ALERT [%s, %d]: %s", process_name, process_id, message);
++			if (level == 2)
++				printk(KERN_CRIT "PROC_CRITICAL [%s, %d]: %s", process_name, process_id, message);
++			if (level == 3)
++				printk(KERN_ERR "PROC_ERROR [%s, %d]: %s", process_name, process_id, message);
++			if (level == 4)
++				printk(KERN_WARNING "PROC_WARNING [%s, %d]: %s", process_name, process_id, message);
++			if (level == 5)
++				printk(KERN_NOTICE "PROC_NOTICE [%s, %d]: %s", process_name, process_id, message);
++			if (level == 6)
++				printk(KERN_INFO "PROC_INFO [%s, %d]: %s", process_name, process_id, message);
++			if (level == 7)
++				printk(KERN_DEBUG "PROC_DEBUG [%s, %d]: %s", process_name, process_id, message);
++		}
++			return level;
++	}
++	else
++		return -1;
++}
++
+ #endif /* CONFIG_COMPAT */
